@@ -1,0 +1,55 @@
+***. But not all descendants in a DAG are on paths from x to y. They may be paths to nowhere in particular, since DAGs need not be maximal.
+ChatGPT said:
+
+Thought for 18 seconds
+You’re absolutely right:
+in a plain DAG a directed-descendant of a collider can lie far away from the walk we are analysing. The algorithm may have put such a vertex in B while exploring some other open walk; there is no guarantee it also occurs on the present walk p.
+
+Because of that, the “bridge” axiom must explicitly require that the descendant is on the same walk:
+
+axiomatization
+where desc_after_onPath:
+  "⟦ desc c d; OnPath d p; Coll c p; Path x y p ⟧
+   ⟹ AfterOnPath d c p"
+With OnPath d p in the premises the statement is both sound and general:
+
+If d is not on p the premise fails, so the axiom is inapplicable (exactly what we want).
+If d is on p the axiom tells us it must occur after c on that walk.Tweaking the proof
+Inside the proper-descendant branch of blocked_after_imp_blocked_len we therefore have to supply OnPath d p before we can invoke the bridge axiom. The earlier ax10a does that for us:
+
+have onp: "OnPath d p"
+  using ax10a[OF after_cd] .
+have after_cd: "AfterOnPath d c p"
+  using desc_after_onPath[OF D1 onp C Path_p] .
+
+after_cd was already available (derived from desc_after … or your own reasoning); invoking ax10a gives onp. Now desc_after_onPath fires, and the rest of the contradiction argument remains unchanged.
+
+Bottom line The axiom really needs OnPath d p; without it, the statement is false for non-maximal DAGs (and similarly for MAGs/PAGs). Adding that premise keeps the proof sound and requires only the tiny two-line adjustment shown above. All other lemmas stay intact, and your fix-point soundness guarantee still holds exactly as required for the FCIT algorithm.
+
+You said: Well this much is clear. If d is not on *any* path p from x to y, then d cannot ever have been added to B, so the assumption that d is in B would be false, contradiction.
+
+===========
+
+***. Well this much is clear. If d is not on *any* path p from x to y, then d cannot ever have been added to B, so the assumption that d is in B would be false, contradiction.
+
+ChatGPT said: Exactly—that resolves the worry neatly:
+
+How d could reach B. The algorithm inserts a vertex into B only when it is currently sitting on that vertex while following an open x − y walk. So membership in B is concrete evidence that the vertex appeared on at least one x − y walk that the procedure explored.
+
+Suppose d were a descendant of a collider c but lay on no x⁣ − y walk at all. Then the search can never arrive at d; consequently d ∉ B. If our contradiction branch assumes both desc c d and d ∈ B, that situation is impossible, so we immediately obtain a contradiction and the branch closes.
+
+When d is on the current walk p. The earlier bridge lemma with the OnPath d p premise applies and tells us d must occur after c. The Blocked_after clause then forces d ∉ B, contradicting d ∈ B and again closing the branch.
+
+Thus in every case the proof holds:
+
+
+Does d lie on some x − y walk?	And what is the consequence?
+
+1. No;	Algorithm never visits d ⇒ d ∉ B d ⇒ assumption d ∈ B impossible.	
+
+2. Yes, but not on the current p; d not on p ⇒ AfterOnPath d c p false ⇒ no contradiction needed (branch already satisfied).	
+
+3. Yes, on current p; Bridge lemma gives AfterOnPath d c p ⇒ d ∉ B ⇒ contradiction with 
+d ∈ B.	
+
+So the strengthened axiom with OnPath d p (or the two-step derivation AfterOnPath ⇒ OnPath) keeps the proof sound while matching the algorithm’s behaviour: only vertices that actually appear on some x − y walk ever enter B.

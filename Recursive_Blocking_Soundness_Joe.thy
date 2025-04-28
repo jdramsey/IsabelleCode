@@ -1,4 +1,4 @@
-theory Recursive_Blocking_Soundness_Joe_copy
+theory Recursive_Blocking_Soundness_Joe
   imports Main
 begin
 
@@ -13,7 +13,7 @@ consts
   Coll :: "node ⇒ path ⇒ bool"                     (* x is a collider on path p *)
   NonC :: "node ⇒ path ⇒ bool"                     (* x is a non-collider on path p *)
   Endpoint :: "node ⇒ path ⇒ bool"                 (* x is an endpoint of path p *)
-  OnPath :: "node ⇒ path ⇒ bool"                   (* x lies on path p *)
+  (*OnPath :: "node ⇒ path ⇒ bool" *)                  (* x lies on path p *)
   AfterOnPath :: "node ⇒ node ⇒ path ⇒ bool"       (* x appears after y on path p *)
   Halts :: "node set ⇒ bool"                       (* recursive blocking halts *)
   ValidBlock :: "node set ⇒ bool"
@@ -41,7 +41,7 @@ definition NoAfterInB_def: "NoAfterInB v B p ≡ ∀d. AfterOnPath d v p ⟶ d �
 
 definition Blocked_after_def:
   "Blocked_after p B ≡ (∃x. NonC x p ∧ x ∈ B) ∨ (∀x. Coll x p ⟶ x ∉ B ∧ NoAfterInB x B p)"
-
+                                                               
 definition NoDescInB :: "node ⇒ node set ⇒ bool" where
   "NoDescInB c B ≡ ¬ (∃d. desc c d ∧ d ∈ B)"
 
@@ -65,6 +65,10 @@ definition MSep :: "node ⇒ node ⇒ node set ⇒ bool" where
 definition Path :: "node ⇒ node ⇒ path ⇒ bool" where
   "Path x y p ⟷ hd p = x ∧ last p = y ∧ walk p"
 
+definition OnPath :: "node ⇒ path ⇒ bool"  where
+  "OnPath d p ≡ d ∈ set p"
+
+
 axiomatization
   f   :: "node set"                   ― ‹the “not-follow” set›
 and b1  :: "node set"                 ― ‹next blocking set›
@@ -84,7 +88,13 @@ where
 
 axiomatization
   where desc_after_in_B:
-    "⟦ desc c d; d ∈ B; Path x y p ⟧ ⟹ AfterOnPath d c p"
+    "⟦ desc c d; d ∈ B; Path x y p; OnPath d p ⟧ ⟹ AfterOnPath d c p"
+
+(*  Invariant: the algorithm can add a vertex v to B
+    only at the moment it is *standing on v* while tracing
+    an open walk from x to y. *)
+axiomatization where
+  AddedFromWalk: "⟦v ∈ B; Halts B⟧ ⟹ (∃p. Path x y p ∧ OnPath v p)"
 
 
 (* 3-way disjunction eliminator *)
@@ -97,7 +107,7 @@ lemma disjE3:
   using assms by blast
 
 (* Theorem: Soundness of Recursive Blocking *)
-theorem soundness_fixpoint:
+theorem fixpoint:
   assumes h1: "Halts B"
   shows "∀p. Blocked_after p B"
 proof (rule ccontr)
@@ -227,7 +237,7 @@ definition FixPointInv ::
   "node ⇒ node ⇒ node set ⇒ bool"   (*  x     y      B  *)
 where
   "FixPointInv x y B ≡
-     (∀p. Path x y p ⟶ length p ≥ 2 ⟶ Blocked_after p B)"
+     (∀p. Path x y p ⟶ length p ≥ 2 ⟶ Blocked_after p B)" 
 
 lemma blocked_imp_blocked_after:
   assumes Path_p : "Path x y p"
@@ -247,57 +257,137 @@ next
     unfolding FixPointInv_def by blast
 qed
 
+(*─────────────────────────────────────────────────────────────────────────*)
+lemma after_collider_not_in_B:
+  assumes BA : "Blocked_after p B"
+      and col: "Coll c p"
+      and aft: "AfterOnPath d c p"
+  shows   "d ∉ B"
+  using BA col aft
+  unfolding Blocked_after_def NoAfterInB_def
+  sorry
+(*─────────────────────────────────────────────────────────────────────────*)
+
+(*  A very small “bridge’’: if d is a (strict) descendant of c
+    and both lie on the same path p, then d occurs *after* c on p. *)
+lemma Desc_Coll_imp_After:
+  assumes "Coll c p"
+      and "desc c d"
+      and "OnPath d p"
+  shows   "AfterOnPath d c p"
+  using assms
+  unfolding AfterOnPath_def desc_def OnPath_def
+  sorry        (* adjust the unfoldings if your names differ *)
+(*─────────────────────────────────────────────────────────────────────────*)
+lemma exists_collider_after_descendant:
+  assumes "Path x y p"  "OnPath d p"  "desc c d"
+  shows   "∃c. Coll c p ∧ AfterOnPath d c p"
+  sorry
+
 lemma blocked_after_imp_blocked:
-  assumes Path_p : "Path x y p"
-      and len2   : "length p ≥ 2"
-      and BA     : "Blocked_after p B"
-  shows   "Blocked p B"
+  assumes HB   : "Halts B"
+      and Pxy  : "Path x y p"
+      and len2 : "length p ≥ 2"
+      and BA   : "Blocked_after p B"
+  shows "Blocked p B"
 proof -
-  have Disj: "(∃v. NonC v p ∧ v ∈ B) ∨
-              (∀c. Coll c p ⟶ c ∉ B ∧ (∀d. AfterOnPath d c p ⟶ d ∉ B))"
+  ― ‹Rewrite the given “blocked-after’’ fact into the explicit disjunction›
+  have Disj:
+       "(∃v. NonC v p ∧ v ∈ B) ∨
+        (∀c. Coll c p ⟶ c ∉ B ∧ (∀d. AfterOnPath d c p ⟶ d ∉ B))"
     using BA unfolding Blocked_after_def NoAfterInB_def by blast
-  then show ?thesis
+
+  ― ‹Case split on which disjunct actually holds›
+  from Disj show ?thesis
   proof
+    ― ‹(1)  A non-collider on p is in B  ⇒  already “Blocked’’›
     assume "∃v. NonC v p ∧ v ∈ B"
-    thus ?thesis unfolding Blocked_def by blast
+    thus "Blocked p B"
+      unfolding Blocked_def by blast
+
   next
+    ― ‹(2)  No non-collider of p lies in B.  Show every collider
+           has **no descendant** in B, hence p is “Blocked’’.›
     assume H: "∀c. Coll c p ⟶ c ∉ B ∧ (∀d. AfterOnPath d c p ⟶ d ∉ B)"
-    have "∀c. Coll c p ⟶ NoDescInB c B"
+
+    have all_col_no_desc: "∀c. Coll c p ⟶ NoDescInB c B"
     proof (intro allI impI)
-      fix c assume C: "Coll c p"
+      fix c  assume C: "Coll c p"
       show "NoDescInB c B"
       proof (unfold NoDescInB_def, rule notI)
         assume "∃d. desc c d ∧ d ∈ B"
-        then obtain d where D1: "desc c d" and D2: "d ∈ B" by blast
+        then obtain d where Ddesc: "desc c d" and DinB: "d ∈ B" by blast
+
+        ― ‹Split the trivial “d = c’’ vs “proper descendant’’ sub-case›
         consider (self) "d = c" | (proper) "d ≠ c" by blast
         then show False
         proof cases
+          ― ‹(a)  d = c contradicts H›
           case self
-          hence "c ∈ B" using D2 by simp
-          moreover from H C have "c ∉ B" by auto
+          hence "c ∈ B" using DinB by simp
+          moreover from H C have "c ∉ B" by blast
           ultimately show False by contradiction
+
         next
+          ― ‹(b)  proper descendant›
           case proper
-          have after_cd: "AfterOnPath d c p"
-            using desc_after_in_B[OF D1 D2 Path_p] .
-          have no_after: "∀d. AfterOnPath d c p ⟶ d ∉ B"
-            using H C by auto
-          have "d ∉ B" using no_after after_cd by blast
-          with D2 show False by contradiction
+
+          ― ‹AddedFromWalk gives *some* x–y path p₁ that contains d›
+          obtain p1 where P1: "Path x y p1" and On1: "OnPath d p1"
+            using AddedFromWalk DinB HB by blast
+
+          ― ‹If that witness path happens to be the current p,
+               the contradiction is immediate…›
+          show False
+          proof (cases "p1 = p")
+            case True
+            then have Onp: "OnPath d p" using On1 by simp
+
+            have aft: "AfterOnPath d c p"
+              using Desc_Coll_imp_After[OF C Ddesc Onp] .
+            have "d ∉ B"
+              by (rule after_collider_not_in_B[OF BA C aft])
+
+            with DinB show False by contradiction
+            next
+              case False  ― ‹p1 ≠ p›
+            
+              ― ‹Every x–y path is blocked after the algorithm halts›
+              have BA1: "Blocked_after p1 B"
+                using fixpoint[OF HB] by blast     ― ‹your global fix-point lemma›
+            
+              ― ‹Find a collider on p1 that precedes d›
+              obtain c1 where C1: "Coll c1 p1" and aft1: "AfterOnPath d c1 p1"
+                using exists_collider_after_descendant[OF P1 On1 Ddesc] by blast
+            
+              ― ‹That collider closes p1, so d ∉ B›
+              have NotInB: "d ∉ B"
+                by (rule after_collider_not_in_B[OF BA1 C1 aft1])
+            
+              from DinB NotInB show False
+                by blast
+            qed
+
         qed
       qed
     qed
-    thus ?thesis unfolding Blocked_def by blast
+
+    ― ‹Universal statement is one of the clauses in Blocked_def›
+    thus "Blocked p B"
+      unfolding Blocked_def by blast
   qed
 qed
 
-theorem blocked_equiv_len_ge2:
-  assumes Path_p : "Path x y p"
+
+theorem blocked_equiv_len_ge:
+  assumes HB     : "Halts B"
+      and Path_p : "Path x y p"
       and len2   : "length p ≥ 2"
       and FPInv  : "FixPointInv x y B"
-  shows   "Blocked_after p B ⟷ Blocked p B"
-  using blocked_after_imp_blocked[OF Path_p len2]
-        blocked_imp_blocked_after [OF Path_p len2 FPInv]
+  shows "Blocked_after p B ⟷ Blocked p B"
+  using blocked_after_imp_blocked[OF HB Path_p len2]
+        blocked_imp_blocked_after[OF Path_p len2 FPInv]
   by blast
+
 
 end
