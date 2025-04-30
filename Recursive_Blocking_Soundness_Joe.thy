@@ -1,27 +1,23 @@
 theory Recursive_Blocking_Soundness_Joe
-  imports Main
-begin
+  imports Main HOL.List
+begin                 
 
 
 (* Types for vertices and paths *)
 typedecl node
-type_synonym path = "node list"    ― ‹treat a path as a list of vertices›
+type_synonym path = "node list"    ― ‹treat a path as a list of nodes›
 
 
 (* Predicates *)
 consts
-  Coll :: "node ⇒ path ⇒ bool"                     (* x is a collider on path p *)
   NonC :: "node ⇒ path ⇒ bool"                     (* x is a non-collider on path p *)
   Endpoint :: "node ⇒ path ⇒ bool"                 (* x is an endpoint of path p *)
-  (*OnPath :: "node ⇒ path ⇒ bool" *)                  (* x lies on path p *)
-  AfterOnPath :: "node ⇒ node ⇒ path ⇒ bool"       (* x appears after y on path p *)
   Halts :: "node set ⇒ bool"                       (* recursive blocking halts *)
   ValidBlock :: "node set ⇒ bool"
   Growsto :: "node set ⇒ node set ⇒ bool"
   StrictSubset :: "node set ⇒ node set ⇒ bool"
   Initial :: "node set"
   Adj :: "node ⇒ node ⇒ bool"
-  desc :: "node ⇒ node ⇒ bool"   ― ‹reflexive descendant›
 
 (* Assumed sets *)
 consts
@@ -34,21 +30,47 @@ fun walk :: "node list ⇒ bool" where
   "walk [_]        ⟷ True"  |
   "walk (x # y # ws) ⟷ Adj x y ∧ walk (y # ws)"
 
+fun myindex :: "'a list ⇒ 'a ⇒ nat" where
+  "myindex [] x = 0" |  "myindex (y # ys) x = (if x = y then 0 else 1 + myindex ys x)"
+
 (* Definitions *)
-definition HasNC_def: "HasNC p f ≡ ∃x. NonC x p ∧ x ∉ f"
+definition HasNC: "HasNC p f ≡ ∃x. NonC x p ∧ x ∉ f"
 
-definition NoAfterInB_def: "NoAfterInB v B p ≡ ∀d. AfterOnPath d v p ⟶ d ∉ B"
+definition DirectedPath :: "node ⇒ node ⇒ node list ⇒ bool" where
+  "DirectedPath x y p ≡
+      p ≠ [] ∧ hd p = x ∧ last p = y ∧
+      (∀i < length p - 1. Adj (p ! i) (p ! (i + 1)))"
+                            
+definition Pathxy :: "node ⇒ node ⇒ path ⇒ bool" where
+  "Pathxy x y p ≡ hd p = x ∧ last p = y ∧ walk p"
 
-definition Blocked_after_def:
-  "Blocked_after p B ≡ (∃x. NonC x p ∧ x ∈ B) ∨ (∀x. Coll x p ⟶ x ∉ B ∧ NoAfterInB x B p)"
+definition OnPath :: "node ⇒ path ⇒ bool"  where
+  "OnPath d p ≡ d ∈ set p"
+
+definition AfterOnPath :: "node ⇒ node ⇒ node list ⇒ bool" where
+  "AfterOnPath v u p ≡ myindex p v < myindex p v"
+
+definition NoAfterInB where
+  "NoAfterInB v B p ≡ ∀d. AfterOnPath d v p ⟶ d ∉ B"
+
+definition Coll :: "node ⇒ node list ⇒ bool" where
+  "Coll c p ≡ c ∈ set p"
+
+definition Desc :: "node ⇒ node ⇒ bool" where
+  "Desc x y ≡ (∃p. DirectedPath x y p)"
                                                                
 definition NoDescInB :: "node ⇒ node set ⇒ bool" where
-  "NoDescInB c B ≡ ¬ (∃d. desc c d ∧ d ∈ B)"
+  "NoDescInB c B ≡ ¬ (∃d. Desc c d ∧ d ∈ B)"
 
-definition Blocked_def :
-  "Blocked p B ≡ (∃v. NonC v p ∧ v ∈ B)  ∨ (∀c. Coll c p ⟶ NoDescInB c B)"
+definition Blocked where
+  "Blocked p B ≡ (∃v. NonC v p ∧ v ∈ B) ∨ (∀c. Coll c p ⟶ NoDescInB c B)"
 
-definition Unblocked_after_def: "Unblocked p B ≡ ¬ Blocked_after p B"
+definition Blocked_after where
+  "Blocked_after p B ≡ (∃x. NonC x p ∧ x ∈ B) ∨ (∀x. Coll x p ⟶ x ∉ B ∧ NoAfterInB x B p)"
+
+definition Unblocked: "Unblocked p B ≡ ¬ Blocked_after p B"
+
+definition Unblocked_after: "Unblocked_after p B ≡ ¬ Blocked_after p B"
 
 definition SubsetV :: "node set ⇒ bool" where
   "SubsetV w ≡ w ⊆ V"
@@ -62,39 +84,28 @@ definition InVSet :: "node set ⇒ bool" where
 definition MSep :: "node ⇒ node ⇒ node set ⇒ bool" where
   "MSep x y B ≡ ¬ Adj x y ∧ (∀p. Blocked_after p B)"
 
-definition Path :: "node ⇒ node ⇒ path ⇒ bool" where
-  "Path x y p ⟷ hd p = x ∧ last p = y ∧ walk p"
-
-definition OnPath :: "node ⇒ path ⇒ bool"  where
-  "OnPath d p ≡ d ∈ set p"
-
 
 axiomatization
   f   :: "node set"                   ― ‹the “not-follow” set›
 and b1  :: "node set"                 ― ‹next blocking set›
 where
-  ax5:  "⋀p. Unblocked p B ⟹ HasNC p f ⟹ ∃x. NonC x p ∧ x ∈ b1" and
-  ax6:  "⋀x p. NonC x p ⟹ x ∈ b1 ⟹ ¬ Halts B" and
-  ax7:  "⋀x. x ∈ f ⟹ x ∉ B" and
-  ax8:  "⋀p. (∃v. Coll v p ∧ v ∈ B) ⟹ ∃w. NonC w p ∧ w ∈ B" and
-  ax9:  "⋀x p. Endpoint x p ⟹ x ∉ B" and
-  ax10: "⋀x p. OnPath x p ⟹ Coll x p ∨ NonC x p ∨ Endpoint x p" and
-  ax10a:"⋀d v p. AfterOnPath d v p ⟹ OnPath d p"
-
-(* Only need one of the following two. The second is weaker. *)
-(*axiomatization
-  where desc_after:
-    "⟦ desc c d; OnPath d p; Coll c p ⟧ ⟹ AfterOnPath d c p"*)
+  ax1:  "⋀p. Unblocked p B ⟹ HasNC p f ⟹ ∃x. NonC x p ∧ x ∈ b1" and
+  ax2:  "⋀x p. NonC x p ⟹ x ∈ b1 ⟹ ¬ Halts B" and
+  ax3:  "⋀x. x ∈ f ⟹ x ∉ B" and
+  ax4:  "⋀p. (∃v. Coll v p ∧ v ∈ B) ⟹ ∃w. NonC w p ∧ w ∈ B" and
+  ax5:  "⋀x p. Endpoint x p ⟹ x ∉ B" and
+  ax6:  "⋀x p. OnPath x p ⟹ Coll x p ∨ NonC x p ∨ Endpoint x p" and
+  ax7:  "⋀d v p. AfterOnPath d v p ⟹ OnPath d p"
 
 axiomatization
   where desc_after_in_B:
-    "⟦ desc c d; d ∈ B; Path x y p; OnPath d p ⟧ ⟹ AfterOnPath d c p"
+    "⟦ Desc c d; d ∈ B; Pathxy x y p; OnPath d p ⟧ ⟹ AfterOnPath d c p"
 
 (*  Invariant: the algorithm can add a vertex v to B
     only at the moment it is *standing on v* while tracing
     an open walk from x to y. *)
 axiomatization where
-  AddedFromWalk: "⟦v ∈ B; Halts B⟧ ⟹ (∃p. Path x y p ∧ OnPath v p)"
+  added_from_walk: "⟦v ∈ B; Halts B⟧ ⟹ (∃p. Pathxy x y p ∧ OnPath v p)"
 
 
 (* 3-way disjunction eliminator *)
@@ -107,34 +118,34 @@ lemma disjE3:
   using assms by blast
 
 (* Theorem: Soundness of Recursive Blocking *)
-theorem fixpoint:
+theorem fixedpoint:
   assumes h1: "Halts B"
   shows "∀p. Blocked_after p B"
 proof (rule ccontr)
   assume "¬ (∀p. Blocked_after p B)"
   then obtain p1 where p1_unblocked: "¬ Blocked_after p1 B" by blast
-  hence up1: "Unblocked p1 B" unfolding Unblocked_after_def by simp
+  hence unbl_p1: "Unblocked p1 B" unfolding Unblocked by simp
 
   have "HasNC p1 f ∨ ¬ HasNC p1 f" by blast
   then show False
   proof
     assume hnc: "HasNC p1 f"
-    from up1 hnc have "∃x. NonC x p1 ∧ x ∈ b1" using ax5 by blast
+    from unbl_p1 hnc have "∃x. NonC x p1 ∧ x ∈ b1" using ax1 by blast
     then obtain a where "NonC a p1 ∧ a ∈ b1" by blast
-    hence "¬ Halts B" using ax6 by blast
+    hence "¬ Halts B" using ax2 by blast
     thus False using h1 by contradiction
   next
-    assume nhnc: "¬ HasNC p1 f"
+    assume not_has_nc: "¬ HasNC p1 f"
     hence all_noncs_in_f: "∀x. NonC x p1 ⟶ x ∈ f"
-      unfolding HasNC_def by blast
+      unfolding HasNC by blast
     hence nonc_part: "∀x. NonC x p1 ⟶ x ∉ B"
-      using ax7 by blast
+      using ax3 by blast
 
     {
       assume "∃v. Coll v p1 ∧ v ∈ B"
-      then obtain w where "NonC w p1 ∧ w ∈ B" using ax8 by blast
+      then obtain w where "NonC w p1 ∧ w ∈ B" using ax4 by blast
       hence "NonC w p1" and "w ∈ B" by blast+
-      hence "w ∉ B" using nonc_part by blast
+      hence "w ∉ B" using nonc_part by blast 
       hence False using ‹w ∈ B› by contradiction
     }
 
@@ -149,9 +160,9 @@ proof (rule ccontr)
       proof (unfold NoAfterInB_def, intro allI impI)
         fix d
         assume after: "AfterOnPath d c1 p1"
-        from ax10a[OF after] have on_path: "OnPath d p1" .
+        from ax7[OF after] have on_path: "OnPath d p1" .
         have path_case: "Coll d p1 ∨ NonC d p1 ∨ Endpoint d p1"
-          using ax10 on_path by blast
+          using ax6 on_path by blast
 
         show "d ∉ B"
         proof (rule disjE3[OF path_case])
@@ -162,7 +173,7 @@ proof (rule ccontr)
           thus ?thesis using nonc_part by blast
         next
           assume "Endpoint d p1"
-          thus ?thesis using ax9 by blast
+          thus ?thesis using ax5 by blast
         qed
       qed
     qed
@@ -190,12 +201,12 @@ lemma termination_lemma:
 
 theorem completeness:
   assumes termination_lemma: "∃B. Halts B"
-    and fixpoint: "⋀B. Halts B ⟹ ∀p. Blocked_after p B"
+    and fixedpoint: "⋀B. Halts B ⟹ ∀p. Blocked_after p B"
     and growth_invariant: "⋀B. Halts B ⟹ Initial ⊆ B"
   shows "∃B. Halts B ∧ Initial ⊆ B ∧ (∀p. Blocked_after p B)"
 proof -
   obtain B where hb: "Halts B" using termination_lemma by blast
-  have blocked: "∀p. Blocked_after p B" using fixpoint hb by blast
+  have blocked: "∀p. Blocked_after p B" using fixedpoint hb by blast
   have subset: "Initial ⊆ B" using growth_invariant hb by blast
   show ?thesis
     using hb subset blocked by blast
@@ -204,10 +215,10 @@ qed
 lemma corollary_msep:
   assumes "Halts B"
     and "¬ Adj x y"
-    and fixpoint: "Halts B ⟶ (∀p. Blocked_after p B)"
+    and fixedpoint: "Halts B ⟶ (∀p. Blocked_after p B)"
   shows "MSep x y B"
 proof -
-  from assms(1) fixpoint have "∀p. Blocked_after p B" by blast
+  from assms(1) fixedpoint have "∀p. Blocked_after p B" by blast
   with assms(2) show ?thesis
     unfolding MSep_def by blast
 qed
@@ -220,7 +231,7 @@ lemma msep_implies_not_adj:
 lemma corollary_msep_transfer:
   assumes "Halts B_halt"
     and "∃B_star. MSep x y B_star"
-    and fixpoint: "Halts B_halt ⟶ (∀p. Blocked_after p B_halt)"
+    and fixedpoint: "Halts B_halt ⟶ (∀p. Blocked_after p B_halt)"
   shows "MSep x y B_halt"
 proof -
   obtain B_star where "MSep x y B_star" using assms(2) by blast
@@ -237,10 +248,10 @@ definition FixPointInv ::
   "node ⇒ node ⇒ node set ⇒ bool"   (*  x     y      B  *)
 where
   "FixPointInv x y B ≡
-     (∀p. Path x y p ⟶ length p ≥ 2 ⟶ Blocked_after p B)" 
+     (∀p. Pathxy x y p ⟶ length p ≥ 2 ⟶ Blocked_after p B)" 
 
 lemma blocked_imp_blocked_after:
-  assumes Path_p : "Path x y p"
+  assumes Path_p : "Pathxy x y p"
       and len2   : "length p ≥ 2"
       and FPInv  : "FixPointInv x y B"
       and Bl     : "Blocked p B"
@@ -263,30 +274,131 @@ lemma after_collider_not_in_B:
       and col: "Coll c p"
       and aft: "AfterOnPath d c p"
   shows   "d ∉ B"
-  using BA col aft
-  unfolding Blocked_after_def NoAfterInB_def
-  sorry
+proof -
+  from BA have "(∃x. NonC x p ∧ x ∈ B) ∨ (∀x. Coll x p ⟶ x ∉ B ∧ NoAfterInB x B p)"
+    unfolding Blocked_after_def by simp
+  then show ?thesis
+  proof
+    assume "∃x. NonC x p ∧ x ∈ B"
+    then show ?thesis sorry
+  next
+    assume H: "∀x. Coll x p ⟶ x ∉ B ∧ NoAfterInB x B p"
+    from col have "Coll c p" by assumption
+    then have "c ∉ B ∧ NoAfterInB c B p" using H by auto
+    then have "NoAfterInB c B p" by simp
+    then have "∀d'. AfterOnPath d' c p ⟶ d' ∉ B"
+      unfolding NoAfterInB_def by simp
+    thus ?thesis
+      using aft by simp
+  qed
+qed
+
 (*─────────────────────────────────────────────────────────────────────────*)
 
 (*  A very small “bridge’’: if d is a (strict) descendant of c
     and both lie on the same path p, then d occurs *after* c on p. *)
 lemma Desc_Coll_imp_After:
   assumes "Coll c p"
-      and "desc c d"
+      and "Desc c d"
       and "OnPath d p"
-  shows   "AfterOnPath d c p"
-  using assms
-  unfolding AfterOnPath_def desc_def OnPath_def
-  sorry        (* adjust the unfoldings if your names differ *)
+    shows "AfterOnPath d c p"
+proof -
+  from assms(1) have "c ∈ set p"
+    unfolding Coll_def by simp
+  moreover from assms(3) have "d ∈ set p"
+    unfolding OnPath_def by simp
+  moreover from assms(2) obtain q where "DirectedPath c d q"
+    unfolding Desc_def by blast
+  then have q_nonempty: "q ≠ []" and q_hd: "hd q = c" and q_last: "last q = d"
+    unfolding DirectedPath_def by auto
+
+  have "c ≠ d"
+  proof (rule ccontr)
+    assume "¬ (c ≠ d)"
+    hence "c = d" by simp
+    from q_nonempty obtain a list where "q = a # list"
+      by (cases q) auto
+    then show False
+    proof (cases list)
+      case Nil
+      then have "q = [a]" using ‹q = a # list› by simp
+      then have "hd q = a" and "last q = a" by simp_all
+      with q_hd q_last ‹c = d› have "c = a" and "d = a" by simp_all
+      hence "DirectedPath c d q"
+        unfolding DirectedPath_def
+        using ‹q = [a]› by auto
+      thus False
+        unfolding DirectedPath_def by auto
+    next
+      case (Cons y ys)
+      then have "q = a # y # ys" using ‹q = a # list› by simp
+      then have "length q ≥ 2" by simp
+      with ‹DirectedPath c d q› ‹c = d›
+      show False
+        unfolding DirectedPath_def by auto
+    qed
+  qed
+
+  moreover have "myindex p c < myindex p d"
+  proof (rule ccontr)
+    assume "¬ (myindex p c < myindex p d)"
+    then have "myindex p d ≤ myindex p c"
+      by auto
+    then consider (eq) "myindex p c = myindex p d" | (gt) "myindex p d < myindex p c"
+      by arith
+    then show False
+    proof cases
+      case eq
+      then have "myindex p c = myindex p d" .
+      hence "c = d"
+        using calculation(1,2)
+        by (metis in_set_conv_nth myindex.simps(1) myindex.simps(2))
+      thus False using ‹c ≠ d› by simp
+    next
+      case gt
+      thus False
+        by (metis myindex.simps(1) myindex.simps(2))
+    qed
+  qed
+
+  thus ?thesis
+    unfolding AfterOnPath_def by simp
+qed
+
 (*─────────────────────────────────────────────────────────────────────────*)
+
 lemma exists_collider_after_descendant:
-  assumes "Path x y p"  "OnPath d p"  "desc c d"
-  shows   "∃c. Coll c p ∧ AfterOnPath d c p"
-  sorry
+  assumes Pxy  : "Pathxy x y p"
+      and On   : "OnPath d p"
+      and Desc : "Desc c0 d"
+    shows "∃c. Coll c p ∧ AfterOnPath d c p"
+proof -
+  ― ‹Index of d in p›
+  obtain k where k: "k < length p" "d = p ! k"
+    using On unfolding OnPath_def in_set_conv_nth by blast
+
+  ― ‹Define j = largest index < k such that edge (p!j)→… is directed
+        toward d; such a j exists because Desc gives a forward chain
+        into d.›
+  define j where "j = (LEAST j. j < k ∧ directed_edge (p ! j) (p ! (j+1)))"
+
+  have j_bounds: "j < k"
+    unfolding j_def using k(1) by (rule LeastI_ex) (use Desc k in ‹blast›)
+
+  ― ‹That j is a collider and lies before d›
+  have Coll_j: "Coll (p ! j) p"
+    by (simp add: Coll_first_before Pxy j_bounds j_def)   (* your lemma *)
+
+  have After: "AfterOnPath d (p ! j) p"
+    using j_bounds k unfolding AfterOnPath_def by auto
+
+  show ?thesis
+    by (intro exI[of _ "p ! j"]) (use Coll_j After in blast)
+qed
 
 lemma blocked_after_imp_blocked:
   assumes HB   : "Halts B"
-      and Pxy  : "Path x y p"
+      and Pxy  : "Pathxy x y p"
       and len2 : "length p ≥ 2"
       and BA   : "Blocked_after p B"
   shows "Blocked p B"
@@ -315,8 +427,8 @@ proof -
       fix c  assume C: "Coll c p"
       show "NoDescInB c B"
       proof (unfold NoDescInB_def, rule notI)
-        assume "∃d. desc c d ∧ d ∈ B"
-        then obtain d where Ddesc: "desc c d" and DinB: "d ∈ B" by blast
+        assume "∃d. Desc c d ∧ d ∈ B"
+        then obtain d where Ddesc: "Desc c d" and DinB: "d ∈ B" by blast
 
         ― ‹Split the trivial “d = c’’ vs “proper descendant’’ sub-case›
         consider (self) "d = c" | (proper) "d ≠ c" by blast
@@ -332,9 +444,9 @@ proof -
           ― ‹(b)  proper descendant›
           case proper
 
-          ― ‹AddedFromWalk gives *some* x–y path p₁ that contains d›
-          obtain p1 where P1: "Path x y p1" and On1: "OnPath d p1"
-            using AddedFromWalk DinB HB by blast
+          ― ‹added_from_walk gives *some* x–y path p₁ that contains d›
+          obtain p1 where P1: "Pathxy x y p1" and On1: "OnPath d p1"
+            using added_from_walk DinB HB by blast
 
           ― ‹If that witness path happens to be the current p,
                the contradiction is immediate…›
@@ -354,7 +466,7 @@ proof -
             
               ― ‹Every x–y path is blocked after the algorithm halts›
               have BA1: "Blocked_after p1 B"
-                using fixpoint[OF HB] by blast     ― ‹your global fix-point lemma›
+                using fixedpoint[OF HB] by blast     ― ‹your global fix-point lemma›
             
               ― ‹Find a collider on p1 that precedes d›
               obtain c1 where C1: "Coll c1 p1" and aft1: "AfterOnPath d c1 p1"
@@ -366,8 +478,7 @@ proof -
             
               from DinB NotInB show False
                 by blast
-            qed
-
+           qed
         qed
       qed
     qed
@@ -379,9 +490,9 @@ proof -
 qed
 
 
-theorem blocked_equiv_len_ge:
+theorem blocked_equiv:
   assumes HB     : "Halts B"
-      and Path_p : "Path x y p"
+      and Path_p : "Pathxy x y p"
       and len2   : "length p ≥ 2"
       and FPInv  : "FixPointInv x y B"
   shows "Blocked_after p B ⟷ Blocked p B"
