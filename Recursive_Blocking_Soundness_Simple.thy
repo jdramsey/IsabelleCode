@@ -2,61 +2,54 @@ theory Recursive_Blocking_Soundness_Simple
   imports Main Graph_Theory_Simple HOL.Wellfounded
 begin
 
-
-
-(* Dummy constants used in some axioms ------------------------------------- *)
-consts
-  V  :: "node set"
-  b1 :: "node set"
-
-consts Initial_B :: "graph ⇒ node ⇒ node ⇒ 'c ⇒ 'f ⇒ node set"
+consts Initial_B :: "node ⇒ node ⇒ 'c ⇒ 'f ⇒ graph ⇒ node set"
 
 (* ------------------------------------------------------------------------- *)
 subsection ‹Path-blocking definitions (unchanged)›
 (* ------------------------------------------------------------------------- *)
 
 definition HasNC :: "path ⇒ node set ⇒ bool" where
-  "HasNC p f ≡ ∃x. NonC x p ∧ x ∉ f"
+  "HasNC p B ≡ ∃x. NonC x p ∧ x ∉ B"
 
 definition NoAfterInB :: "node ⇒ node set ⇒ path ⇒ bool" where
-  "NoAfterInB v b p ≡ ∀d. AfterOnPath d v p ⟶ d ∉ b"
+  "NoAfterInB v B p ≡ ∀d. AfterOnPath d v p ⟶ d ∉ B"
 
-definition DirectedPath :: "graph ⇒ node ⇒ node ⇒ node list ⇒ bool" where
-  "DirectedPath g x y p ≡
+definition DirectedPath :: "node ⇒ node ⇒ node list ⇒ graph ⇒ bool" where
+  "DirectedPath x y p G ≡
       p ≠ [] ∧ hd p = x ∧ last p = y ∧
-      (∀i < length p - 1. Adj g (p ! i) (p ! (i + 1)))"
+      (∀i < length p - 1. Adj (p ! i) (p ! (i + 1)) G)"
 
-definition Desc :: "graph ⇒ node ⇒ node ⇒ bool" where
-  "Desc g x y ≡ (∃p. DirectedPath g x y p)"
+definition Desc :: "node ⇒ node ⇒ graph ⇒ bool" where
+  "Desc x y G ≡ ∃p. DirectedPath x y p G"
 
-definition NoDescInB :: "graph ⇒ node ⇒ node set ⇒ bool" where
-  "NoDescInB g c B ≡ ¬ (∃d. Desc g c d ∧ d ∈ B)"
+definition NoDescInB :: "node ⇒ node set ⇒ graph ⇒ bool" where
+  "NoDescInB c B G ≡ ¬ (∃d. Desc c d G ∧ d ∈ B)"
 
-definition Blocked :: "graph ⇒ path ⇒ node set ⇒ bool" where
-  "Blocked g p B ≡ (∃v. NonC v p ∧ v ∈ B) ∨ (∀c. Coll c p ⟶ NoDescInB g c B)"
+definition ABlocked :: "path ⇒ node set ⇒ graph ⇒ bool" where
+  "ABlocked p B G ≡ (∃v. NonC v p ∧ v ∈ B) ∨ (∀c. Coll c p ⟶ NoDescInB c B G)"
 
-definition Unblocked :: "graph ⇒ path ⇒ node set ⇒ bool" where
-  "Unblocked g p b ≡ ¬ Blocked g p b"
+definition Unblocked :: "path ⇒ node set ⇒ graph ⇒ bool" where
+  "Unblocked p B G ≡ ¬ ABlocked p B G"
 
-definition MSep :: "graph ⇒ node ⇒ node ⇒ node set ⇒ bool" where
-  "MSep g x y B ≡ ¬ Adj g x y ∧ (∀p. Blocked g p B)"
+definition MSep :: "node ⇒ node ⇒ node set ⇒ graph ⇒ bool" where
+  "MSep x y B G ≡ ¬ Adj x y G ∧ (∀p. Path x y p G ⟶ ABlocked p B G)"
 
-definition Path :: "graph ⇒ node ⇒ node ⇒ path ⇒ bool" where
-  "Path g x y p ⟷ hd p = x ∧ last p = y ∧ walk g p"
+definition Path :: "node ⇒ node ⇒ path ⇒ graph ⇒ bool" where
+  "Path x y p G ⟷ hd p = x ∧ last p = y ∧ walk p G"
 
-definition walk_p :: "graph ⇒ node list ⇒ bool" where
-  "walk_p g p ≡ walk g p"
+definition walk_p :: "node list ⇒ graph ⇒ bool" where
+  "walk_p p G ≡ walk p G"
 
-definition ValidBlock :: "graph ⇒ node set ⇒ bool" where
-  "ValidBlock g B ≡ (∀p c. Coll c p ⟶ NoDescInB g c B)"
+definition ValidBlock :: "node set ⇒ graph ⇒ bool" where
+  "ValidBlock B G ≡ ∀p c. Coll c p ⟶ NoDescInB c B G"
 
 definition eligible_noncollider
-  :: "graph ⇒ node ⇒ node ⇒ node ⇒ node set ⇒ path ⇒ bool"
+  :: "node ⇒ node ⇒ node ⇒ node set ⇒ path ⇒ graph ⇒ bool"
      ("Eligible'_noncollider _ _ _ _ _ _" [100,100,100,100,100,100] 100)
-where
-  "eligible_noncollider g x y v B p ≡
-        Unblocked g p B
-      ∧ Path g x y p
+  where
+  "eligible_noncollider x y v B p G ≡
+        Unblocked p B G
+      ∧ Path x y p G
       ∧ NonC v p
       ∧ v ∉ B
       ∧ (∀w. NonC w p ∧ w ∉ B ⟶ AfterOnPath w v p)"
@@ -64,27 +57,35 @@ where
 definition NextB :: "node set ⇒ node ⇒ node set"  where
   "NextB B0 v ≡ B0 ∪ {v}"
 
+definition Halts :: "node set ⇒ node ⇒ node ⇒ graph ⇒ bool" where
+  "Halts B x y G ≡ ¬ (∃p v. Path x y p G ∧ NonC v p ∧ v ∉ B ∧ ¬ ABlocked p B G)"
+
+definition Weakly_minimal :: "node ⇒ node ⇒ node set ⇒ graph ⇒ bool" where
+  "Weakly_minimal x y B G ≡
+     (∀p. Path x y p G ⟶ ABlocked p B G)        
+   ∧ (∀v ∈ B. ∃p. Path x y p G ∧ ¬ ABlocked p (B - {v}) G)"
+
 (* ------------------------------------------------------------------------- *)
 subsection ‹Three-way disjunction eliminator (helper lemma)›
 (* ------------------------------------------------------------------------- *)
 
 inductive RB_step
-  :: "graph ⇒ node ⇒ node ⇒ 'c ⇒ 'f ⇒ node set ⇒ node set ⇒ bool"
+  :: "node ⇒ node ⇒ 'c ⇒ 'f ⇒ node set ⇒ node set ⇒ graph ⇒ bool"
 where
   add_noncollider:
-    "eligible_noncollider g x y v B0 p ⟹
-     RB_step g x y C F B0 (NextB B0 v)"
+    "eligible_noncollider x y v B0 p G ⟹
+     RB_step x y C F B0 (NextB B0 v) G"
 
 inductive Algorithm_steps
-    :: "graph ⇒ node ⇒ node ⇒ 'c ⇒ 'f ⇒ node set ⇒ bool"
+    :: "node ⇒ node ⇒ 'c ⇒ 'f ⇒ node set ⇒ graph ⇒ bool"
 where
   base:
-    "Initial_B g x y C F = B ⟹
-     Algorithm_steps g x y C F B"
+    "Initial_B x y C F G = B ⟹
+     Algorithm_steps x y C F B G"
 | step:
-    "RB_step g x y C F B0 B1 ⟹
-     Algorithm_steps g x y C F B1 ⟹
-     Algorithm_steps g x y C F B0"
+    "RB_step x y C F B0 B1 G ⟹
+     Algorithm_steps x y C F B1 G ⟹
+     Algorithm_steps x y C F B0 G"
 
 lemma disjE3:
   assumes "A ∨ B ∨ C"
@@ -92,183 +93,251 @@ lemma disjE3:
   shows R
   using assms by blast
 
-lemma elig_not_collider:
-  "eligible_noncollider g x y v B p ⟹ ¬ Coll v p"
-  sorry
-  (* by (auto simp: eligible_noncollider_def) *)
+axiomatization where
+  InitialBlock_is_valid:
+    "∀x y C F G. ValidBlock (Initial_B x y C F G) G"
 
-lemma elig_not_desc_of_collider:
-  assumes E: "eligible_noncollider g x y v B p"
-      and C: "Coll c p"
-      and A: "AfterOnPath v c p"
-    shows "¬ Desc g c v"
-  sorry
-  (* using E C A by (auto simp: eligible_noncollider_def) *)
+(* New argument *)
 
+axiomatization where
+  interior_nodes_are_Coll_or_NonC:
+    "OnPath v p ⟹ v ≠ hd p ⟹ v ≠ last p ⟹ (Coll v p ∨ NonC v p)"
 
-lemma extend_preserves_ValidBlock:
-  assumes step: "RB_step g x y C F B0 B1"       ― ‹one loop iteration›
-      and inv0: "ValidBlock g B0"
-  shows   "ValidBlock g B1"
-  sorry
+lemma not_Coll_imp_NonC:
+  assumes "OnPath v p"
+      and "v ≠ hd p" and "v ≠ last p"
+      and "¬ Coll v p"
+  shows "NonC v p"
+  using assms interior_nodes_are_Coll_or_NonC by blast
 
-lemma InitialBlock_is_valid:
-  shows "∀g x y C F. ValidBlock g (Initial_B g x y C F)"
-  sorry
-
-lemma algorithm_preserves_invariant:
-  assumes run: "Algorithm_steps g x y C F B"
-  shows   "ValidBlock g B"
-  using run
-  sorry
-(*proof (induction g x y C F B rule: Algorithm_steps.induct)
-  case (base g x y C F B)
-  ― ‹Given: Initial_B g x y C F = B›
-  then show "ValidBlock g B"
-    using InitialBlock_is_valid
-    by (simp add: base.hyps)
-next
-  case (step g x y C F B0 B1)
-  ― ‹Given: RB_step g x y C F B0 B1 and Algorithm_steps g x y C F B1›
-  ― ‹IH: ValidBlock g B1›
-  have rb: "RB_step g x y C F B0 B1" using step.hyps(1) .
-  have IH: "ValidBlock g B1" using step.IH .
-  show "ValidBlock g B0"
-    using extend_preserves_ValidBlock[OF rb IH] .
-qed*)
-
-(* ------------------------------------------------------------------------- *)
-subsection ‹High-level soundness›
-(* ------------------------------------------------------------------------- *)
-
-lemma fixpoint:
-  assumes halts : "Halts B"
-      and algo  : "Algorithm_steps g x y C F B"
-  shows "∀p. Path g x y p ⟶ Blocked g p B"
+lemma unblocked_implies_collider_path:
+  assumes halts: "Halts B x y G"
+      and steps: "Algorithm_steps x y C F B G"
+      and path: "Path x y p G"
+      and not_blocked: "¬ ABlocked p B G"
+  shows "∀v. OnPath v p ⟶ (v = hd p ∨ v = last p ∨ Coll v p)"
 proof
-  fix p
-  show "Path g x y p ⟶ Blocked g p B"
+fix v
+show "OnPath v p ⟶ (v = hd p ∨ v = last p ∨ Coll v p)"
   proof
-    assume path: "Path g x y p"
-    show "Blocked g p B"
-    proof (rule ccontr)
-      assume nb: "¬ Blocked g p B"
-
-      have valid: "ValidBlock g B"
-        using algo by (rule algorithm_preserves_invariant)
-
-      obtain c where coll: "Coll c p" and bad: "¬ NoDescInB g c B"
-        using nb unfolding Blocked_def by (auto simp: not_all)
-
-      from valid coll have good: "NoDescInB g c B"
-        unfolding ValidBlock_def by blast
-
-      from good bad show False by contradiction
+    assume on: "OnPath v p"
+    show "v = hd p ∨ v = last p ∨ Coll v p"
+    proof (cases "v = hd p ∨ v = last p")
+      case True
+      then show ?thesis by blast
+    next
+      case False
+      then have interior: "v ≠ hd p" "v ≠ last p" by auto
+  
+      from interior_nodes_are_Coll_or_NonC[OF on interior(1) interior(2)]
+      have cases: "Coll v p ∨ NonC v p" .
+  
+      then show ?thesis
+      proof
+        assume "Coll v p"
+        then show ?thesis by simp
+      next
+        assume nc: "NonC v p"
+        show ?thesis
+        proof (cases "v ∈ B")
+          case True
+          then have "ABlocked p B G"
+            unfolding ABlocked_def using nc by blast
+          with not_blocked show ?thesis by contradiction
+        next
+          case False
+          then have "∃p' v'. Path x y p' G ∧ NonC v' p' ∧ v' ∉ B ∧ ¬ ABlocked p' B G"
+            using path nc not_blocked by blast
+          then have "¬ Halts B x y G"
+            unfolding Halts_def by blast
+          with halts show ?thesis by contradiction
+        qed
+      qed
     qed
   qed
 qed
 
-(* If we add one variable at a time to the blocking set, never removing
-any,  and there is only a finite set of variables, the procedure must halt. *)
-lemma termination_lemma:
-  fixes V :: "'a set"
-    and Halts :: "'a set ⇒ bool"
-  assumes finV: "finite V"
-    and init: "B ⊆ V"
-    and grow: "⋀B. B ⊆ V ⟹ ¬ Halts B ⟹ (∃B'. B ⊂ B' ∧ B' ⊆ V)"
-  shows "∃B. Halts B"
-proof (rule ccontr)
-  assume no_halt: "¬ (∃B. Halts B)"
 
-  text ‹Define the set of all subsets of V where Halts does not hold›
-  let ?X = "{B. B ⊆ V ∧ ¬ Halts B}"
-  let ?R = "{(x, y). x ⊂ y ∧ y ∈ ?X}"
+(* ------------------------------------------------------------------------- *)
+subsection ‹Soundness Theorem›
+(* ------------------------------------------------------------------------- *)
 
-  have finX: "finite ?X"
-    using finV by (simp add: finite_subset)
+(* ------------------------------------------------------------------------- *)
+subsection ‹Justification and Regress›
+(* ------------------------------------------------------------------------- *)
 
-  text ‹Every B ∈ ?X can be extended to a strictly larger B' in ?X›
-  have no_max: "∀B ∈ ?X. ∃B'. B' ∈ ?X ∧ B ⊂ B'"
+definition JustifiedInB :: "node ⇒ node set ⇒ node ⇒ node ⇒ graph ⇒ bool" where
+  "JustifiedInB v B x y G ≡
+     ∃p. Path x y p G ∧ NonC v p ∧ v ∈ set p ∧ v ∈ B ∧ ¬ ABlocked p (B - {v}) G"
+
+inductive JustificationChain :: "(nat ⇒ node) ⇒ node set ⇒ node ⇒ node ⇒ graph ⇒ bool" where
+  base:
+    "JustifiedInB (f 0) B x y G ⟹ JustificationChain f B x y G"
+| step:
+    "JustificationChain f B x y G ⟹
+     JustifiedInB (f (Suc n)) B x y G ⟹
+     Desc (f n) (f (Suc n)) G ⟹
+     JustificationChain f B x y G"
+
+lemma regress_chain_finite:
+  assumes fin: "finite (V G)"
+      and just: "∀v ∈ B. JustifiedInB v B x y G"
+  shows "¬ (∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B))"
+proof
+  assume "∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B)"
+  then obtain f :: "nat ⇒ node" where inj: "inj_on f UNIV" and inB: "∀i. f i ∈ B"
+    by blast
+
+  have "B ⊆ V G"
   proof
-    fix B assume B_in: "B ∈ ?X"
-    then have B_subV: "B ⊆ V" and nh: "¬ Halts B" by auto
-    obtain B' where sub: "B ⊂ B'" and subV: "B' ⊆ V" and nh': "¬ Halts B'"
-      using grow[OF B_subV nh] by blast
-    then have "B' ∈ ?X" by (simp add: subV nh')
-    then show "∃B'. B' ∈ ?X ∧ B ⊂ B'" using sub by blast
+    fix v assume "v ∈ B"
+    from just[rule_format, OF ‹v ∈ B›]
+    obtain p where P: "Path x y p G" and NC: "NonC v p" and In: "v ∈ set p" and NB: "¬ ABlocked p (B - {v}) G"
+      unfolding JustifiedInB_def by blast
+    hence "v ∈ set p" by blast
+    then show "v ∈ V G"
+      using ‹Path x y p G› unfolding Path_def
+      by (metis in_set_conv_nth)
   qed
 
-  text ‹But a finite set of subsets of a finite set cannot have an infinite ⊂-chain›
-  have wf_subset: "wf ?R"
-    using finX by (rule wf_finite_psubset)
+  from ‹B ⊆ V G› fin have "finite B"
+    by (rule finite_subset)
 
-  have "?X ≠ {}"
-    using init no_halt by auto
+  have inj_f: "inj f"
+    using inj unfolding inj_on_def by simp
+  
+  have "range f ⊆ B"
+    using inB by auto
 
-  then obtain B where B_in: "B ∈ ?X"
-    and min: "⋀B'. (B', B) ∈ ?R ⟹ B' ∉ ?X"
-    using wf_subset by (rule wfE_min)
+  have "infinite (range f)"
+    using inj_f infinite_UNIV_nat by (metis inj_on_def inj_on_subset range_subsetD)
+  
+  from ‹finite B› ‹range f ⊆ B› ‹infinite (range f)›
+  show False
+    using finite_subset by blast
 
-  have "Halts B"
-    using min by auto
-
-  then show False
-    using no_halt by blast
 qed
 
+lemma all_nodes_in_B_are_justified:
+  assumes steps: "Algorithm_steps x y C F B G"
+  shows "∀v ∈ B. JustifiedInB v B x y G"
+  using steps
+  sorry
+(*proof (induction x y C F B G rule: Algorithm_steps.induct)
+  case (base x y C F B G)
+  ― ‹Initial_B gives us B directly. It may be empty ⇒ vacuously true›
+  then show "∀v ∈ B. JustifiedInB v B x y G"
+    unfolding JustifiedInB_def by blast
+next
+  case (step x y C F B0 B1 G)
+  ― ‹We have RB_step from B0 to B1, and IH for B1›
 
-definition Weakly_minimal :: "graph ⇒ node ⇒ node ⇒ node set ⇒ bool" where
-  "Weakly_minimal g x y B ≡
-       (∀p. Path g x y p ⟶ Blocked g p B)        
-     ∧ (∀v ∈ B. ∃p. Path g x y p ∧ ¬ Blocked g p (B - {v}))"  
+  have IH: "∀v ∈ B1. JustifiedInB v B1 x y G"
+    using step.IH by blast
 
-text ‹
-  Invariant: Every node in B was added to block some path p that remains unblocked
-  if v is removed from B. That is, B contains only “justified” nodes.
+  ― ‹From RB_step, v was added to B0 to get B1›
+  obtain v p where
+    eligible: "eligible_noncollider x y v B0 p G"
+    and B1_eq: "B1 = B0 ∪ {v}"
+    using step.hyps(1) unfolding RB_step.simps by blast
 
-  This ensures weak minimality: no v ∈ B can be removed without reopening
-  at least one x–y path.
-›
-definition JustifiedBlock :: "graph ⇒ node ⇒ node ⇒ node set ⇒ bool" where
-  "JustifiedBlock g x y B ≡
-     (∀v ∈ B. ∃p. Path g x y p ∧ v ∈ set p ∧ ¬ Blocked g p (B - {v}))"
+  show "∀v' ∈ B0. JustifiedInB v' B0 x y G"
+  proof
+    fix v'
+    assume "v' ∈ B0"
+    then have "v' ∈ B1" using B1_eq by blast
+    from IH[rule_format, OF this]
+    ― ‹v' justified in B1 ⇒ also justified in B0›
+    ― ‹JustifiedInB allows weakening of B if v' ≠ v›
+    show "JustifiedInB v' B0 x y G"
+      unfolding JustifiedInB_def
+      using ‹v' ∈ B0› by blast
+  qed
 
-lemma algorithm_ensures_justified_block:
-  assumes "Algorithm_steps G x y C F B"
-  shows "JustifiedBlock G x y B"
+  ― ‹Also justify the newly added node v›
+  have "JustifiedInB v B0 x y G"
+  proof -
+    from eligible have path: "Path x y p G"
+      and nonc: "NonC v p"
+      and notinB: "v ∉ B0"
+      and unblocked: "¬ ABlocked p B0 G"
+      and first: "∀w. NonC w p ∧ w ∉ B0 ⟶ AfterOnPath w v p"
+      unfolding eligible_noncollider_def by blast+
+
+    show ?thesis
+      unfolding JustifiedInB_def
+      by (intro exI[of _ p]) (auto simp: path nonc unblocked)
+  qed
+
+  ― ‹Put everything together: all of B0 ∪ {v} is justified›
+  with B1_eq show "∀v ∈ B0. JustifiedInB v B0 x y G"
+    by blast
+qed*)
+
+lemma regress_chain_exists_if_unblocked:
+  assumes path: "Path x y p G"
+      and not_blocked: "¬ ABlocked p B G"
+      and steps: "Algorithm_steps x y C F B G"
+    shows "∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B)"
   sorry
 
-lemma algorithm_inserts_only_necessary_nodes:
-  assumes steps: "Algorithm_steps g x y C F B"
-      and v_in_B: "v ∈ B"
-  shows "∃p. Path g x y p ∧ ¬ Blocked g p (B - {v})"
-  sorry
+theorem regress_argument_soundness:
+  assumes fin: "finite (V G)"
+      and steps: "Algorithm_steps x y C F B G"
+      and halts: "Halts B x y G"
+  shows "∀p. Path x y p G ⟶ ABlocked p B G"
+proof
+  fix p
+  show "Path x y p G ⟶ ABlocked p B G"
+  proof
+    assume path: "Path x y p G"
+    show "ABlocked p B G"
+    proof (rule ccontr)
+      assume not_blocked: "¬ ABlocked p B G"
 
-lemma weakly_minimal:
-  assumes halt: "Halts B"
-      and steps: "Algorithm_steps g x y C F B"
-  shows "Weakly_minimal g x y B"
+      from halts steps path not_blocked
+      have collider_path: "∀v. OnPath v p ⟶ (v = hd p ∨ v = last p ∨ Coll v p)"
+        by (rule unblocked_implies_collider_path)
+
+      ― ‹Assume that all nodes added to B were justified›
+      have all_justified: "∀v ∈ B. JustifiedInB v B x y G"
+        using steps by (rule all_nodes_in_B_are_justified)
+
+      then have "¬ (∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B))"
+        using fin regress_chain_finite by blast
+
+      from path not_blocked steps
+      have chain: "∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B)"
+        by (rule regress_chain_exists_if_unblocked)
+
+      have no_chain: "¬ (∃f :: nat ⇒ node. inj_on f UNIV ∧ (∀i. f i ∈ B))"
+        using fin all_justified by (rule regress_chain_finite)
+
+       from chain no_chain show False by contradiction
+    qed
+  qed
+qed
+
+lemma blocking_set_is_weakly_minimal:
+  assumes steps: "Algorithm_steps x y C F B G"
+      and halts: "Halts B x y G"
+      and fin: "finite (V G)"
+  shows "Weakly_minimal x y B G"
 proof -
-  ― ‹Part 1: Fixpoint — all paths are blocked›
-  have all_blocked: "∀p. Path g x y p ⟶ Blocked g p B" 
-    using halt steps by (rule fixpoint)
+  have all_blocked: "∀p. Path x y p G ⟶ ABlocked p B G"
+    using fin steps halts by (rule regress_argument_soundness)
 
-  ― ‹Part 2: Justification — every v in B is needed›
-  have justified: "∀v ∈ B. ∃p. Path g x y p ∧ ¬ Blocked g p (B - {v})"
+  have justified: "∀v ∈ B. ∃p. Path x y p G ∧ ¬ ABlocked p (B - {v}) G"
   proof
-    fix v assume vB: "v ∈ B"
-    from steps have "JustifiedBlock g x y B"
-      using algorithm_ensures_justified_block by blast
-    then obtain p where "Path g x y p" and "v ∈ set p" and "¬ Blocked g p (B - {v})"
-      using vB unfolding JustifiedBlock_def by blast
-    then show "∃p. Path g x y p ∧ ¬ Blocked g p (B - {v})" by blast
+    fix v assume "v ∈ B"
+    from all_nodes_in_B_are_justified[OF steps, rule_format, OF this]
+    obtain p where "Path x y p G" and "¬ ABlocked p (B - {v}) G"
+      unfolding JustifiedInB_def by blast
+    then show "∃p. Path x y p G ∧ ¬ ABlocked p (B - {v}) G" by blast
   qed
 
-  ― ‹Assemble final result›
   show ?thesis
-    unfolding Weakly_minimal_def
-    using all_blocked justified by blast
+    unfolding Weakly_minimal_def using all_blocked justified by blast
 qed
-
 
 end

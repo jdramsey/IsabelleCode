@@ -35,8 +35,8 @@ definition block_after :: "'p path \<Rightarrow> 'p set \<Rightarrow> bool" wher
        (\<exists>v. is_noncollider v \<and> v \<in> B)                 \<or>
        (\<forall>c. is_collider c \<longrightarrow> c \<notin> B \<and> (\<forall>d. after c d p \<longrightarrow> d \<notin> B))"
 
-definition blocked :: "'p path \<Rightarrow> 'p set \<Rightarrow> bool" where
-  "blocked p Z \<longleftrightarrow>
+definition ABlocked :: "'p path \<Rightarrow> 'p set \<Rightarrow> bool" where
+  "ABlocked p Z \<longleftrightarrow>
        (\<exists>v. is_noncollider v \<and> v \<in> Z)  \<or>
        (\<forall>c. is_collider c \<and> c \<in> set p \<longrightarrow> NoDescInB c Z)"
 
@@ -45,7 +45,7 @@ definition blocked :: "'p path \<Rightarrow> 'p set \<Rightarrow> bool" where
 lemma blocked_after_imp_blocked:
   assumes Path_p  : "Path x y p"
       and MB : "block_after p B"
-  shows "blocked p B"
+  shows "ABlocked p B"
 proof -
   \<comment> \<open>Unfold the disjunction coming from block_after\<close>
   have Disj:

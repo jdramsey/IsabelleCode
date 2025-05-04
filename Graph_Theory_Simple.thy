@@ -15,7 +15,7 @@ subsection \<open>Basic predicates used only by the recursive-blocking theory\<c
 
 type_synonym node = nat  \<comment> \<open>or use any other type you prefer\<close>
 type_synonym edge = "node \<times> node"
-type_synonym path = "node list"    \<comment> \<open>treat a path as a list of vertices\<close>
+type_synonym path = "node list"  \<comment> \<open>treat a path as a list of vertices\<close>
 
 consts
   Coll        :: "node \<Rightarrow> path \<Rightarrow> bool"          \<comment> \<open>v is collider on p\<close>
@@ -23,105 +23,106 @@ consts
   Endpoint    :: "node \<Rightarrow> path \<Rightarrow> bool"
   OnPath      :: "node \<Rightarrow> path \<Rightarrow> bool"
   AfterOnPath :: "node \<Rightarrow> node \<Rightarrow> path \<Rightarrow> bool"
-  Halts       :: "node set \<Rightarrow> bool"
   Growsto     :: "node set \<Rightarrow> node set \<Rightarrow> bool"
   StrictSubset:: "node set \<Rightarrow> node set \<Rightarrow> bool"
   Initial     :: "node set"
- (* Adj         :: "node \<Rightarrow> node \<Rightarrow> bool"           \<comment> \<open>directed adjacency\<close>*)
-  collider    :: "node \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool"     \<comment> \<open>middle vertex is a collider\<close>
-  noncoll     :: "node \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool"     \<comment> \<open>middle vertex is a non-collider\<close>
+  collider    :: "node \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool"   \<comment> \<open>middle vertex is a collider\<close>
+  noncoll     :: "node \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool"   \<comment> \<open>middle vertex is a non-collider\<close>
 
 record graph =
   V :: "node set"
   E :: "edge set"
 
-definition Adj :: "graph \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool" where
-  "Adj g x y \<equiv> (x, y) \<in> E g"
+(* Adjacency between two nodes in the graph *)
+definition Adj :: "node \<Rightarrow> node \<Rightarrow> graph \<Rightarrow> bool" where
+  "Adj x y G \<equiv> (x, y) \<in> E G"
 
 text \<open>A *walk* is a (non-empty) list of vertices in which every pair of
       consecutive vertices is adjacent.\<close>
-fun walk :: "graph \<Rightarrow> node list \<Rightarrow> bool" where
-  "walk _ []         \<longleftrightarrow> False" |
-  "walk _ [_]        \<longleftrightarrow> True"  |
-  "walk g (x # y # ws) \<longleftrightarrow> Adj g x y \<and> walk g (y # ws)"
+fun walk :: "path \<Rightarrow> graph \<Rightarrow> bool" where
+  "walk [] _         \<longleftrightarrow> False" |
+  "walk [_] _        \<longleftrightarrow> True"  |
+  "walk (x # y # ws) G \<longleftrightarrow> Adj x y G \<and> walk (y # ws) G"
 
-(* ---------------------------------------------------------------- *)
-section \<open>Activation along a walk\<close>
-(* ---------------------------------------------------------------- *)
-
-definition active :: "graph \<Rightarrow> node list \<Rightarrow> node set \<Rightarrow> bool" where
-  "active g vs S \<longleftrightarrow>
-     walk g vs \<and>
+(* Activation of a path under conditioning set S *)
+definition active :: "path \<Rightarrow> node set \<Rightarrow> graph \<Rightarrow> bool" where
+  "active vs S G \<longleftrightarrow>
+     walk vs G \<and> 
      (let n = length vs in
         (\<forall>i. 0 < i \<and> i + 1 < n \<longrightarrow>
              ((noncoll (vs ! (i - 1)) (vs ! i) (vs ! (i + 1)) \<longrightarrow> vs ! i \<notin> S) \<and>
               (collider (vs ! (i - 1)) (vs ! i) (vs ! (i + 1)) \<longrightarrow> vs ! i \<in> S))))"
 
-definition d_conn :: "graph \<Rightarrow> node \<Rightarrow> node \<Rightarrow> node set \<Rightarrow> bool" where
-  "d_conn g x y S \<longleftrightarrow> (\<exists>P. hd P = x \<and> last P = y \<and> active g P S)"
+(* d-connection via some active path *)
+definition d_conn :: "node \<Rightarrow> node \<Rightarrow> node set \<Rightarrow> graph \<Rightarrow> bool" where
+  "d_conn x y S G \<longleftrightarrow> (\<exists>P. hd P = x \<and> last P = y \<and> active P S G)"
 
-definition DirectedPath :: "graph \<Rightarrow> node \<Rightarrow> node \<Rightarrow> node list \<Rightarrow> bool" where
-  "DirectedPath g x y p \<equiv>
+(* Directed path from x to y *)
+definition DirectedPath :: "node \<Rightarrow> node \<Rightarrow> path \<Rightarrow> graph \<Rightarrow> bool" where
+  "DirectedPath x y p G \<equiv>
      p \<noteq> [] \<and> hd p = x \<and> last p = y \<and>
-     (\<forall>i < length p - 1. Adj g (p ! i) (p ! (i + 1)))"
+     (\<forall>i < length p - 1. Adj (p ! i) (p ! (i + 1)) G)"
 
-definition Desc :: "graph \<Rightarrow> node \<Rightarrow> node \<Rightarrow> bool" where
-  "Desc g x y \<equiv> \<exists>p. DirectedPath g x y p"
+(* y is a descendant of x *)
+definition Desc :: "node \<Rightarrow> node \<Rightarrow> graph \<Rightarrow> bool" where
+  "Desc x y G \<equiv> \<exists>p. DirectedPath x y p G"
 
-definition NoDescInB :: "graph \<Rightarrow> node \<Rightarrow> node set \<Rightarrow> bool" where
-  "NoDescInB g c B \<equiv> \<not> (\<exists>d. Desc g c d \<and> d \<in> B)"
+(* No descendant of c is in the blocking set B *)
+definition NoDescInB :: "node \<Rightarrow> node set \<Rightarrow> graph \<Rightarrow> bool" where
+  "NoDescInB c B G \<equiv> \<not> (\<exists>d. Desc c d G \<and> d \<in> B)"
 
-definition Blocked :: "graph \<Rightarrow> path \<Rightarrow> node set \<Rightarrow> bool" where
-  "Blocked g p B \<equiv> (\<exists>v. NonC v p \<and> v \<in> B) \<or> (\<forall>c. Coll c p \<longrightarrow> NoDescInB g c B)"
+(* ABlocked: path is either blocked by a noncollider in B or all colliders lack descendants in B *)
+definition ABlocked :: "path \<Rightarrow> node set \<Rightarrow> graph \<Rightarrow> bool" where
+  "ABlocked p B G \<equiv> (\<exists>v. NonC v p \<and> v \<in> B) \<or> (\<forall>c. Coll c p \<longrightarrow> NoDescInB c B G)"
 
-definition Path :: "graph \<Rightarrow> node \<Rightarrow> node \<Rightarrow> path \<Rightarrow> bool" where
-  "Path g x y p \<longleftrightarrow> hd p = x \<and> last p = y \<and> walk g p"
+(* A path from x to y in the graph *)
+definition Path :: "node \<Rightarrow> node \<Rightarrow> path \<Rightarrow> graph \<Rightarrow> bool" where
+  "Path x y p G \<longleftrightarrow> hd p = x \<and> last p = y \<and> walk p G"
 
 (* ---------------------------------------------------------------- *)
 section \<open>Fundamental helper lemmas (placeholders for now)\<close>
 (* ---------------------------------------------------------------- *)
 
 lemma walk_concat_single:
-  assumes "walk g (xs @ [v])"
-      and "walk g (v # ys)"
-  shows   "walk g (xs @ v # ys)"
+  assumes "walk (xs @ [v]) G"
+      and "walk (v # ys) G"
+  shows   "walk (xs @ v # ys) G"
   sorry
 
 lemma active_append:
-  assumes seg1: "active g (xs @ [a]) S1"
-      and seg2: "active g (a # ys)  S2"
+  assumes seg1: "active (xs @ [a]) S1 G"
+      and seg2: "active (a # ys)  S2 G"
       and mid:  "(noncoll (last xs) a (hd ys) \<longrightarrow> a \<notin> S2) \<and>
                  (collider (last xs) a (hd ys) \<longrightarrow> a \<in> S1)"
-  shows  "active g (xs @ a # ys) (S1 \<union> S2)"
+  shows  "active (xs @ a # ys) (S1 \<union> S2) G"
   sorry
 
 lemma d_conn_bridge:
-  assumes "d_conn g x a T1"
-      and "d_conn g a y T2"
+  assumes "d_conn x a T1 G"
+      and "d_conn a y T2 G"
       and "(noncoll x a a \<and> a \<notin> T2) \<or> (collider x a a \<and> a \<in> T1)"
-  shows  "d_conn g x y (T1 \<union> T2)"
+  shows  "d_conn x y (T1 \<union> T2) G"
   sorry
 
 (* ---------------------------------------------------------------- *)
 section \<open>Lemma 3.3.1 (Spirtes et al.)\<close>
 (* ---------------------------------------------------------------- *)
 
-definition hop :: "graph \<Rightarrow> nat \<Rightarrow> node list \<Rightarrow> node set \<Rightarrow> bool" where
-  "hop g i vs S \<longleftrightarrow>
-        d_conn g (vs ! i) (vs ! (i + 1)) S \<and>
-        (noncoll (vs ! i) (vs ! (i + 1)) (vs ! (i + 1)) \<longrightarrow> vs ! (i + 1) \<notin> S) \<and>
-        (collider (vs ! i) (vs ! (i + 1)) (vs ! (i + 2)) \<longrightarrow> vs ! (i + 1) \<in> S)"
+definition hop :: "nat \<Rightarrow> node list \<Rightarrow> node set \<Rightarrow> graph \<Rightarrow> bool" where
+  "hop i vs S G \<longleftrightarrow>
+     d_conn (vs ! i) (vs ! (i + 1)) S G \<and>
+     (noncoll (vs ! i) (vs ! (i + 1)) (vs ! (i + 1)) \<longrightarrow> vs ! (i + 1) \<notin> S) \<and>
+     (collider (vs ! i) (vs ! (i + 1)) (vs ! (i + 2)) \<longrightarrow> vs ! (i + 1) \<in> S)"
 
-definition hopS :: "graph \<Rightarrow> nat \<Rightarrow> node list \<Rightarrow> node set" where
-  "hopS g i vs \<equiv> (SOME S. hop g i vs S)"
+definition hopS :: "nat \<Rightarrow> node list \<Rightarrow> graph \<Rightarrow> node set" where
+  "hopS i vs G \<equiv> (SOME S. hop i vs S G)"
 
 lemma lemma_3_1_1:
-  fixes g :: graph
-    and vs :: "node list"
-  assumes walk: "walk g vs"
+  fixes vs :: "node list"
+  assumes walk: "walk vs G"
       and len:  "length vs \<ge> 2"
-      and hops: "\<And>i. i < length vs - 1 \<Longrightarrow> hop g i vs (hopS g i vs)"
-  shows "d_conn g (hd vs) (last vs) (\<Union>i<length vs - 1. hopS g i vs)"
+      and hops: "\<And>i. i < length vs - 1 \<Longrightarrow> hop i vs (hopS i vs G) G"
+  shows "d_conn (hd vs) (last vs) (\<Union>i<length vs - 1. hopS i vs G) G"
   sorry
 
 end
